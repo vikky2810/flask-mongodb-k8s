@@ -1,0 +1,20 @@
+# The name follows the StatefulSet convention <template>-<statefulset>-<ordinal>,
+# so the StatefulSet's volumeClaimTemplate adopts this claim for pod mongodb-0
+# instead of creating a new one.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-data-mongodb-0
+  namespace: flask-mongo
+  labels:
+    app: mongodb
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  resources:
+    requests:
+      storage: 1Gi
+  selector:
+    matchLabels:
+      app: mongodb

@@ -1,0 +1,15 @@
+# Render Blueprint: New > Blueprint in the Render dashboard, point it at this repo.
+# Render has no managed MongoDB, so use a free MongoDB Atlas cluster and paste
+# its connection string into MONGODB_URI when Render asks for it.
+services:
+  - type: web
+    name: flask-mongodb-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGO_DB_NAME
+        value: flask_db

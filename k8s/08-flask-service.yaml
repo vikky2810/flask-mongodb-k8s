@@ -1,0 +1,18 @@
+# NodePort: reachable from the host via <minikube ip>:30080 or
+# `minikube service flask-service -n flask-mongo --url`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-service
+  namespace: flask-mongo
+  labels:
+    app: flask-app
+spec:
+  type: NodePort
+  selector:
+    app: flask-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000
+      nodePort: 30080

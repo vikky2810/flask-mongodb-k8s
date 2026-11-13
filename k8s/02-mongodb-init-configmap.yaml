@@ -1,0 +1,15 @@
+# Scripts in /docker-entrypoint-initdb.d run once, on the first start with an
+# empty data directory. This one creates the application user so Flask never
+# needs the root credentials.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-init
+  namespace: flask-mongo
+data:
+  create-app-user.js: |
+    db.getSiblingDB('flask_db').createUser({
+      user: process.env.MONGO_APP_USERNAME,
+      pwd: process.env.MONGO_APP_PASSWORD,
+      roles: [{ role: 'readWrite', db: 'flask_db' }]
+    });
