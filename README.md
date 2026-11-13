@@ -19,6 +19,9 @@ flask-mongodb-app/
 │   ├── 07-flask-deployment.yaml      # 2 replicas
 │   ├── 08-flask-service.yaml         # NodePort 30080
 │   └── 09-flask-hpa.yaml             # 2–5 replicas at 70% CPU
+├── docs/
+│   ├── raw/                # captured kubectl output from the HPA test
+│   └── screenshots/        # README images
 └── tests/
     ├── db_test.sh          # endpoints, auth, persistence
     └── load_test.sh        # high traffic → HPA scale-out
@@ -191,15 +194,47 @@ GET  /data  -> [{"sampleKey":"sampleValue"}]
 kubectl get pods -n flask-mongo -w
 kubectl top pods -n flask-mongo
 ```
-Expected behavior:
-- At idle: `cpu: 1%/70%`, 2 replicas.
-- Under load: CPU rises above 70% of the 200m request. The HPA scales 2 → 3 → … → 5, adding replicas about every 15–30s based on the metrics-server scrape interval. The 0.5 CPU limit caps each pod, so load spreads to the new replicas.
-- After Ctrl+C, the generators are deleted. After the default 5-minute scale-down stabilization window, the HPA returns to 2.
-
 You can also load test from your machine with `hey -z 2m -c 50 $URL/`.
 
-### Issues to watch for
-- **HPA shows `<unknown>/70%`:** metrics-server is not enabled or not ready yet. Run `minikube addons enable metrics-server` and wait about a minute. Also check that the pods have CPU requests; without them, utilization cannot be computed.
+#### Autoscaling results
+
+**Test setup.** Minikube v1.39.0 with the Docker driver, 2 CPUs and 3 GB RAM, with metrics-server enabled. Four `busybox` pods ran `wget` against `http://flask-service/` in a tight loop for about 4.5 minutes. HPA state was sampled every 15 seconds. The raw output is in [`docs/raw/`](docs/raw/).
+
+| Time | Event | Avg CPU (of 200m request) | Replicas |
+|---|---|---|---|
+| 10:30:10 | Idle baseline | 1% | 2 |
+| 10:30:11 | 4 load generators started | | |
+| 10:31:13 | First metrics under load | 99% | 2 → 3 |
+| 10:32:15 | Still above target with 3 pods | 193% | 3 → 5 |
+| 10:33:17 | Load spread over 5 pods | 131% | 5 |
+| 10:34:19 | Steady at the maximum | 106% | 5 |
+| 10:34:33 | Load generators deleted | | |
+| 10:35:19 | CPU back under target | 60% | 5 (scale-down cooldown) |
+
+**Observations.**
+- The HPA reacted within about 60 seconds of load starting. That delay is the metrics-server scrape interval plus the HPA's 15-second sync period.
+- It scaled 2 → 3, then 3 → 5 a minute later. That second step jumped two replicas at once, because CPU was at 193%, far above the target. It stopped at 5 because that is `maxReplicas`.
+- With 5 replicas, each Flask pod settled at about 210m CPU, close to its 200m request and under its 500m limit. Average utilization stayed above 70% at about 106%. The test was bounded by `maxReplicas` and by the node's 2 CPUs: the 4 load generators alone used about 1.4 CPU.
+- MongoDB stayed at about 10m CPU. The `/` endpoint does not touch the database, so this test isolates Flask's CPU.
+- After the load stopped, CPU fell below 70% within about 45 seconds. Replicas stay at 5 for the default 5-minute scale-down stabilization window before returning to 2. This prevents flapping when traffic is bursty.
+
+![HPA timeline: CPU vs replicas](docs/screenshots/hpa-timeline.png)
+
+**Idle baseline: 2 replicas, CPU at 1%**
+
+![Baseline](docs/screenshots/1-baseline.png)
+
+**Under load: scaled to 5 replicas**
+
+![Under load](docs/screenshots/2-under-load.png)
+
+**HPA events: the SuccessfulRescale entries show 2 → 3 → 5**
+
+![HPA describe](docs/screenshots/3-hpa-describe.png)
+
+### Issues encountered during testing
+- **HPA showed `<unknown>/70%` for the first ~2 minutes.** The `FailedGetResourceMetric` warnings in the describe output above come from this. metrics-server had just been enabled and had not served its first scrape yet. It resolved on its own. If it doesn't, check `kubectl get apiservice v1beta1.metrics.k8s.io` and confirm the pods have CPU requests; without them, utilization cannot be computed.
+- **Saturation at `maxReplicas`.** At 5 replicas, CPU stayed above target at about 106%. In production you would raise `maxReplicas` or add nodes. Here it is capped at 5 as the assignment requires.
 - **Init script did not create `flaskuser`:** scripts in `/docker-entrypoint-initdb.d` only run when `/data/db` is empty. If the PV already holds data from an earlier run, wipe it with `minikube ssh -- sudo rm -rf /data/mongodb` and recreate the pod.
 - **Flask pods restart at startup before Mongo is up:** the app connects lazily, so `/` stays healthy. `/data` returns an error until Mongo is ready, then recovers without a restart.
 - **MongoDB OOMKilled:** this happens when the WiredTiger cache is not capped. It is fixed with `--wiredTigerCacheSizeGB 0.25`.

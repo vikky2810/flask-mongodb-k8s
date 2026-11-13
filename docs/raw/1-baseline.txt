@@ -1,0 +1,15 @@
+$ kubectl get hpa -n flask-mongo
+NAME            REFERENCE              TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+flask-app-hpa   Deployment/flask-app   cpu: 1%/70%   2         5         2          22m
+
+$ kubectl get pods -n flask-mongo
+NAME                        READY   STATUS    RESTARTS   AGE
+flask-app-c6fb5775d-2fjst   1/1     Running   0          22m
+flask-app-c6fb5775d-c97s9   1/1     Running   0          22m
+mongodb-0                   1/1     Running   0          20m
+
+$ kubectl top pods -n flask-mongo
+NAME                        CPU(cores)   MEMORY(bytes)   
+flask-app-c6fb5775d-2fjst   3m           65Mi            
+flask-app-c6fb5775d-c97s9   3m           65Mi            
+mongodb-0                   9m           74Mi            
