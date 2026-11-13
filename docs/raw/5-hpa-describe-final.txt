@@ -1,0 +1,26 @@
+Name:                                                  flask-app-hpa
+Namespace:                                             flask-mongo
+Labels:                                                <none>
+Annotations:                                           <none>
+CreationTimestamp:                                     Fri, 13 Nov 2026 10:07:22 +0530
+Reference:                                             Deployment/flask-app
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  1% (3m) / 70%
+Min replicas:                                          2
+Max replicas:                                          5
+Deployment pods:                                       5 current / 2 desired
+Conditions:
+  Type            Status  Reason            Message
+  ----            ------  ------            -------
+  AbleToScale     True    SucceededRescale  the HPA controller was able to update the target scale to 2
+  ScalingActive   True    ValidMetricFound  the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  True    TooFewReplicas    the desired replica count is less than the minimum replica count
+  ScaledToZero    False   NotScaledToZero   the HPA controller did not scale the workload to zero
+Events:
+  Type     Reason                        Age                 From                       Message
+  ----     ------                        ----                ----                       -------
+  Warning  FailedGetResourceMetric       31m (x12 over 33m)  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get pods.metrics.k8s.io)
+  Warning  FailedComputeMetricsReplicas  31m (x12 over 33m)  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: unable to fetch metrics from resource metrics API: the server is currently unable to handle the request (get pods.metrics.k8s.io)
+  Normal   SuccessfulRescale             10m                 horizontal-pod-autoscaler  New size: 3; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             9m                  horizontal-pod-autoscaler  New size: 5; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             14s                 horizontal-pod-autoscaler  New size: 2; reason: All metrics below target

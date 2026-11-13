@@ -198,7 +198,7 @@ You can also load test from your machine with `hey -z 2m -c 50 $URL/`.
 
 #### Autoscaling results
 
-**Test setup.** Minikube v1.39.0 with the Docker driver, 2 CPUs and 3 GB RAM, with metrics-server enabled. Four `busybox` pods ran `wget` against `http://flask-service/` in a tight loop for about 4.5 minutes. HPA state was sampled every 15 seconds. The raw output is in [`docs/raw/`](docs/raw/).
+**Test setup.** Minikube v1.39.0 with the Docker driver, 2 CPUs and 3 GB RAM, with metrics-server enabled. Four `busybox` pods ran `wget` against `http://flask-service/` in a tight loop for about 4.5 minutes, then were deleted while sampling continued for scale-down. HPA state was sampled every 15 seconds. The raw output is in [`docs/raw/`](docs/raw/).
 
 | Time | Event | Avg CPU (of 200m request) | Replicas |
 |---|---|---|---|
@@ -210,13 +210,15 @@ You can also load test from your machine with `hey -z 2m -c 50 $URL/`.
 | 10:34:19 | Steady at the maximum | 106% | 5 |
 | 10:34:33 | Load generators deleted | | |
 | 10:35:19 | CPU back under target | 60% | 5 (scale-down cooldown) |
+| 10:36:20 | Back to idle | 1% | 5 (still in cooldown) |
+| 10:41:10 | Stabilization window over | 1% | 5 → 2 |
 
 **Observations.**
 - The HPA reacted within about 60 seconds of load starting. That delay is the metrics-server scrape interval plus the HPA's 15-second sync period.
 - It scaled 2 → 3, then 3 → 5 a minute later. That second step jumped two replicas at once, because CPU was at 193%, far above the target. It stopped at 5 because that is `maxReplicas`.
 - With 5 replicas, each Flask pod settled at about 210m CPU, close to its 200m request and under its 500m limit. Average utilization stayed above 70% at about 106%. The test was bounded by `maxReplicas` and by the node's 2 CPUs: the 4 load generators alone used about 1.4 CPU.
 - MongoDB stayed at about 10m CPU. The `/` endpoint does not touch the database, so this test isolates Flask's CPU.
-- After the load stopped, CPU fell below 70% within about 45 seconds. Replicas stay at 5 for the default 5-minute scale-down stabilization window before returning to 2. This prevents flapping when traffic is bursty.
+- After the load stopped, CPU fell below 70% within about 45 seconds. Replicas stayed at 5 for the default 5-minute scale-down stabilization window, then dropped to 2 in one step at 10:41 ("All metrics below target"). The window prevents flapping when traffic is bursty.
 
 ![HPA timeline: CPU vs replicas](docs/screenshots/hpa-timeline.png)
 
@@ -231,6 +233,10 @@ You can also load test from your machine with `hey -z 2m -c 50 $URL/`.
 **HPA events: the SuccessfulRescale entries show 2 → 3 → 5**
 
 ![HPA describe](docs/screenshots/3-hpa-describe.png)
+
+**After the load stopped: scaled back to the 2-replica minimum**
+
+![After scale-down](docs/screenshots/4-after-scale-down.png)
 
 ### Issues encountered during testing
 - **HPA showed `<unknown>/70%` for the first ~2 minutes.** The `FailedGetResourceMetric` warnings in the describe output above come from this. metrics-server had just been enabled and had not served its first scrape yet. It resolved on its own. If it doesn't, check `kubectl get apiservice v1beta1.metrics.k8s.io` and confirm the pods have CPU requests; without them, utilization cannot be computed.
